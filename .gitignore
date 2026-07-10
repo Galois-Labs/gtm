@@ -1,0 +1,17 @@
+.env
+.env.*
+__pycache__/
+*.pyc
+.venv/
+venv/
+dist/
+build/
+*.egg-info/
+.DS_Store
+runs/
+cache/
+*.xlsx
+*.db
+*.db-wal
+*.db-shm
+.dogfood_*

@@ -1,0 +1,168 @@
+#!/usr/bin/env bash
+# Galois GTM setup — wires the wave skills into your agent host(s).
+#
+#   git clone https://github.com/Galois-Labs/gtm.git ~/.claude/skills/galois-gtm
+#   cd ~/.claude/skills/galois-gtm && ./setup
+#
+# The flow is the workbook: one file per campaign at ~/GaloisGTM/<campaign>/gtm.xlsx.
+# A wave reads it, works, writes it back. No galois CLI in the main path, no MCP
+# server, no hosted anything. Setup just symlinks the skills into each host it finds:
+#   Claude Code     ~/.claude/skills/galois-<skill>  (symlinks)  + ~/.claude/agents/<def>.md
+#   Codex CLI       ~/.codex/skills/galois-<skill>   (symlinks)
+#   Claude Desktop  ZIP each skill folder for upload via Settings -> Customize -> Skills
+# The only runtime dependency is python3 + openpyxl for .xlsx (CSV mode needs nothing).
+# Idempotent; per-host fail-soft.
+#
+#   ./setup                       # wire every host it finds (default)
+#   ./setup --host claude|codex|desktop   # target one host
+set -u
+
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# ---------- args ---------------------------------------------------------------------------
+HOST_FILTER="all"
+WITH_CLI=0
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --host)     HOST_FILTER="${2:-all}"; shift 2 ;;
+    -h|--help)
+      # print only the leading doc block (line 2 up to the first non-comment line)
+      awk 'NR==1{next} /^#/{sub(/^# ?/,""); print; next} {exit}' "$0"
+      exit 0 ;;
+    *) shift ;;
+  esac
+done
+
+SKILLS=(setup targets enrich messages queue daily)
+AGENT_DEFS=(company-researcher tier-verifier contact-hunter fact-checker)
+ok()   { printf '  \033[32m✓\033[0m %s\n' "$1"; }
+warn() { printf '  \033[33m!\033[0m %s\n' "$1"; }
+fail() { printf '  \033[31m✗\033[0m %s\n' "$1"; }
+
+echo "galois-gtm setup — repo: $REPO"
+wired_any=0
+
+# ---------- 1. Claude Code -----------------------------------------------------------------
+if [ "$HOST_FILTER" = "all" ] || [ "$HOST_FILTER" = "claude" ]; then
+  if [ -d "$HOME/.claude" ]; then
+    mkdir -p "$HOME/.claude/skills" "$HOME/.claude/agents"
+    for s in "${SKILLS[@]}"; do
+      ln -sfn "$REPO/skills/$s" "$HOME/.claude/skills/galois-$s"
+    done
+    for a in "${AGENT_DEFS[@]}"; do
+      ln -sfn "$REPO/agents/$a.md" "$HOME/.claude/agents/$a.md"
+    done
+    ok "Claude Code: skills /galois-setup … /galois-daily + ${#AGENT_DEFS[@]} agent defs"
+    wired_any=1
+  else
+    [ "$HOST_FILTER" = "claude" ] && fail "~/.claude not found — is Claude Code installed?"
+  fi
+fi
+
+# ---------- 2. Codex CLI -------------------------------------------------------------------
+if [ "$HOST_FILTER" = "all" ] || [ "$HOST_FILTER" = "codex" ]; then
+  if [ -d "$HOME/.codex" ]; then
+    mkdir -p "$HOME/.codex/skills"
+    for s in "${SKILLS[@]}"; do
+      ln -sfn "$REPO/skills/$s" "$HOME/.codex/skills/galois-$s"
+    done
+    ok "Codex: skills wired into ~/.codex/skills/galois-*"
+    echo "    optional hard rails for AGENTS.md: $REPO/codex/AGENTS.snippet.md"
+    wired_any=1
+  else
+    [ "$HOST_FILTER" = "codex" ] && fail "~/.codex not found — is Codex installed?"
+  fi
+fi
+
+# ---------- 3. Claude Desktop (skills upload — no MCP server) -------------------------------
+# Desktop skills run in a sandbox with an ephemeral FS and blocked egress, so the durable
+# state is the workbook on your disk: upload -> a wave edits it in-sandbox -> download ->
+# save back over ~/GaloisGTM/<campaign>/gtm.xlsx. Skills upload as a ZIP of each skill folder.
+if [ "$HOST_FILTER" = "all" ] || [ "$HOST_FILTER" = "desktop" ]; then
+  DESKTOP_DIR="$HOME/Library/Application Support/Claude"
+  # Remove any stale MCP entry a previous version of this script installed — the wave
+  # flow uses no MCP server on any surface. Backs up first; touches only the galois key.
+  DESKTOP_CFG="$DESKTOP_DIR/claude_desktop_config.json"
+  if [ -f "$DESKTOP_CFG" ] && command -v python3 >/dev/null 2>&1; then
+    python3 - "$DESKTOP_CFG" <<'PYEOF' && ok "Claude Desktop: removed stale mcpServers.galois entry (no MCP server in the wave flow)"
+import json, shutil, sys
+p = sys.argv[1]
+try:
+    cfg = json.load(open(p))
+except Exception:
+    sys.exit(1)
+if "galois" in cfg.get("mcpServers", {}):
+    shutil.copy2(p, p + ".galois-backup")
+    del cfg["mcpServers"]["galois"]
+    json.dump(cfg, open(p, "w"), indent=2)
+    sys.exit(0)
+sys.exit(1)
+PYEOF
+  fi
+  # Build upload ZIPs on macOS (Desktop present) or whenever the user targets desktop explicitly.
+  if [ -d "$DESKTOP_DIR" ] || [ "$HOST_FILTER" = "desktop" ]; then
+    if command -v zip >/dev/null 2>&1; then
+      OUT="$REPO/build/desktop-skills"
+      mkdir -p "$OUT"
+      for s in "${SKILLS[@]}"; do
+        rm -f "$OUT/galois-$s.zip"
+        ( cd "$REPO/skills" && zip -qr "$OUT/galois-$s.zip" "$s" )
+      done
+      ok "Claude Desktop: built ${#SKILLS[@]} skill ZIPs in build/desktop-skills/"
+      echo "    Upload each: Desktop → Settings → Customize → Skills → add the ZIP."
+    else
+      warn "Claude Desktop: 'zip' not found — upload the skill FOLDERS directly:"
+      echo "    Desktop → Settings → Customize → Skills → add each folder under $REPO/skills/"
+    fi
+    echo "    Then each wave: upload gtm.xlsx (or add it to the Project), run the skill,"
+    echo "    download the updated file, save it back over ~/GaloisGTM/<campaign>/gtm.xlsx."
+    echo "    No API keys on Desktop — every contact routes DM-only (the zero-key motion)."
+    wired_any=1
+  else
+    [ "$HOST_FILTER" = "desktop" ] && fail "Claude Desktop app dir not found"
+  fi
+fi
+
+# ---------- 4. Runtime dependency note -----------------------------------------------------
+PY=""
+for c in python3 python3.13 python3.12 python3.11; do
+  command -v "$c" >/dev/null 2>&1 && PY="$c" && break
+done
+if [ -n "$PY" ] && "$PY" -c "import openpyxl" >/dev/null 2>&1; then
+  ok "wave dependency: python3 + openpyxl present — .xlsx waves ready (CSV mode needs nothing)"
+elif [ -n "$PY" ]; then
+  warn "wave dependency: .xlsx waves need openpyxl — run: $PY -m pip install --user openpyxl"
+  echo "    (or skip it and let the flow use CSV tabs, which need nothing)"
+else
+  warn "wave dependency: install python3 for .xlsx waves (brew install python@3.12); CSV mode needs nothing"
+fi
+
+
+# ---------- 6. Routing + finish ------------------------------------------------------------
+if [ "$wired_any" = "1" ]; then
+  cat <<'EOF'
+
+Add this section to your CLAUDE.md / AGENTS.md so natural language routes here:
+
+  ## galois-gtm
+  Prospecting, lead lists, and outreach run through the galois-gtm skills, which
+  work one spreadsheet per campaign at ~/GaloisGTM/<campaign>/gtm.xlsx:
+  /galois-setup (interview -> profile + workbook) · /galois-targets (discover +
+  tier) · /galois-enrich (contacts + verified-email reveal) · /galois-messages
+  (draft + fact-check, caution dial 0-3) · /galois-queue (build the DM queue) ·
+  /galois-daily (morning digest). Each wave reads the workbook, works, writes it
+  back, and reports what changed in one line. UPPERCASE columns (TIER, SELECT,
+  STATUS) are the human's; the agent never overwrites them. The human sends every
+  message. Requests like "find me leads" or "draft outreach" route to these skills.
+
+Verified-email reveal is optional and keyed by environment variable (never written
+to the workbook); the skills ask before any paid call and log spend to the Budget tab:
+
+  export APOLLO_API_KEY=<value>     # ~1 credit per verified email, on a hit only
+  export HUNTER_API_KEY=<value>     # fallback finder; free tier ~25/mo
+
+Done. First run: /galois-setup (it interviews you and creates the workbook).
+EOF
+else
+  warn "no hosts wired — nothing detected, or the --host target is missing"
+fi

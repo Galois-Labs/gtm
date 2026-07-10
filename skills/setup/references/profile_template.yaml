@@ -1,0 +1,114 @@
+# galois.profile.yaml — field reference, schema_version 1 (validated by profile/schema.py, extra fields FORBIDDEN)
+# LOCATION: the live file is ~/GaloisGTM/<campaign>/galois.profile.yaml, next to gtm.xlsx — /galois-setup copies this template there.
+# Sheet-native flow: the agent edits that file directly; read "galois profile set <path> <value>" below as "set <dotted path> in the yaml".
+# Use these dotted paths with:  galois profile set <path> <value> --source asked|default|file:<p>|url:<u>
+# Never edit the YAML file directly; the CLI changelogs and version-bumps every write.
+# Values shown are the house defaults; comments name the question that fills each field.
+
+meta:
+  schema_version: 1
+  profile_version: 1              # bumped by the CLI on every accepted edit — never set by hand
+  slug: my-company                # set at `galois init --slug <slug>`
+  created: ""                     # ISO timestamp strings, maintained by the CLI
+  updated: ""
+  agent: claude-code              # claude-code | codex | claude-ai — which runtime interviewed
+  intake_mode: chat               # file | chat | url — set at the mode chooser
+  source_doc: null                # Mode A: {path: "...", sha256: "..."} — powers drift detection
+  source_url: null                # Mode C
+  confirmed_by_user: false        # set ONLY by `galois profile confirm` at the accept gate
+  defaulted_fields: []            # escape-hatch defaults; drift check-ins re-ask these first
+
+constitution:                     # Q5.4 confirm screen; every downstream stage re-reads this every run
+  verified_emails_only: true      # CONSTANT — no off switch in any UI (deliverability)
+  linkedin_manual_only: true      # CONSTANT — public-search-only; the human sends every message (ToS)
+  fact_check_before_export: true  # mode derived from claims.caution_dial
+  no_pattern_guessing: true       # CONSTANT — structural
+  suppression: {domains: [], people: []}   # Q2.4 spillover: never-contact lists
+  opt_out_line: ""                # plain-text opt-out required on cold email
+
+identity:
+  company: ""
+  url: ""
+  one_liner: ""                   # Q1.1
+  product_description: ""
+  sender: {name: "", title: "", linkedin_url: ""}   # Q1.4 follow-up
+
+offer:                            # Q1.2
+  type: paid_pilot                # paid_pilot | demo | free_audit | call | waitlist
+  price_band: null                # e.g. "$6-25K scoped pilot"
+  artifact: null                  # the low-friction giveaway, e.g. "48h compliance gap-report"
+
+icp:
+  segments: []                    # Q2.1 — list of {key, weight, keywords: [], pain_evidence: []}
+    # - {key: aerospace_defense, weight: 2.5, keywords: [avionics, satellite], pain_evidence: [DO-254, AS9100]}
+  tier_rubric:                    # Q2.2 + Q2.3
+    signals: [hiring_intent, regulatory_event, funding, tech_in_use, expo_attendance]
+    tier_a: {min_signals: 2, min_sources: 2}   # the audit-proven multi-signal gate (53% vs 11%)
+    tier_b: {min_signals: 1}
+    tier_c: {icp_fit: true, min_signals: 0}
+  decisive_question: ""           # R2 addition — the one-line tiebreaker
+  known_traps: []                 # R2 addition — e.g. "PCB fabricators are C regardless"
+  geo:                            # Q3.2
+    mode: metros                  # metros | country | global_english | custom
+    locations: []                 # e.g. ["San Diego, California, US"]
+    exclusions: []
+  size_bands: ["11,20", "21,50", "51,100", "101,200", "201,500"]   # Q3.3, Apollo range format
+  exclude: []                     # Q2.4 — competitors, current customers, domains, size floors
+
+personas:                         # Q3.1 — seed from titles_library.md, user prunes/adds
+  buyer: []                       # titles: who signs
+  champion: []                    # titles: who fights for it daily
+  exclude_tokens: [recruit, talent, "human resources"]   # never the entry point
+  seniorities: [owner, founder, c_suite, vp, head, director, manager, senior]
+  channel_sequence:               # per-persona priority; interview may flip champions email-first
+    buyer: [linkedin_dm, email]
+    champion: [linkedin_dm, email]
+
+voice:                            # Q1.4 + Q4.4
+  sender: founder_first_person    # founder_first_person | named_teammate | brand_voice
+  register: peer_technical        # peer_technical | consultative | formal | custom
+  banned_words: ["AI", "revolutionary", "leverage"]      # always asked (policy)
+  banned_styles: ["em dashes", "exclamation marks"]
+  length_bands: {dm_note_chars: 300, dm_words: 60, email_words: [75, 120]}
+  signoff: ""
+
+claims:
+  caution_dial: 1                 # Q5.1 — 0..3, THE headline control; always asked (policy)
+  factcheck_mode: block           # DERIVED by code: dial 0-1 -> block, 2-3 -> flag. NEVER set this.
+  assertable: []                  # Q1.3 self-claims whitelist; at dial 0-1 nothing else is claimed about the user
+  evidence_rule: "every claim about the prospect cites a source captured during research"
+
+cta:                              # Q5.2
+  default:
+    type: artifact_offer          # artifact_offer | call | reply_gauge | custom
+    text: ""
+  segmented: []                   # list of {segment, condition, cta}
+    # - {segment: aerospace_defense, condition: itar_likely, cta: "US-person, on-prem-capable pilot CTA"}
+  meeting_link: null
+
+channels:
+  priority: [linkedin_dm, email]  # Q4.1 — always asked (policy); values from {linkedin_dm, email}
+  linkedin:                       # Q4.2 (skip if email-only)
+    enabled: true
+    plan: null                    # sales_nav | premium | free | none
+    established: true             # 6+ months, active
+    daily_connects: 18            # 15-20 established; ~20 cap + 30-day warm-up if new
+    weekly_connects: 80
+  email:                          # Q4.3 (skip if DM-only)
+    enabled: true
+    sending_domain: null
+    warmed: false                 # unwarmed -> rows export hold_until_warmed
+    daily_cap: 25                 # mature inbox; 5-10 during warm-up
+    warmup_daily_cap: 10
+
+budget:                           # Q5.3 — always asked (policy)
+  apollo_credits_per_run: 100
+  hunter_finds_per_month: 25      # free-tier reality; do not oversell (our run resolved 6/44)
+  max_contacts_per_run: 200
+  sends_per_day: {email: 25, dm: 18}
+  websearch_calls_per_agent: 2    # audit-proven hard cap — not an interview question
+  subagent_concurrency: 8         # audit-proven 8-12 band; doctor reports the surface ceiling
+
+provenance: {}                    # per-field, written by the CLI alongside each set:
+  # identity.one_liner: {source: "url:https://...", confidence: 0.9, state: confirmed}
+  # source in {asked, default, file:<path>, url:<page>}; state in {confirmed, inferred, stale}
