@@ -10,7 +10,7 @@ How it works: a clarifying interview (point it at a doc, answer in chat, or drop
 
 Open Claude Code (or Codex) and paste this. The agent does the rest.
 
-> Install galois-gtm: run **`git clone --single-branch --depth 1 https://github.com/Galois-Labs/gtm.git ~/.claude/skills/galois-gtm && cd ~/.claude/skills/galois-gtm && ./setup`** then add a "galois-gtm" section to CLAUDE.md that says: prospecting, lead lists, and outreach route through the galois-gtm skills — /galois-setup (interview -> profile + workbook), /galois-targets (discover + tier), /galois-enrich (contacts + verified-email reveal), /galois-messages (draft + fact-check, caution dial 0-3), /galois-queue (build the DM queue), /galois-daily (morning digest) — each wave works one spreadsheet at `~/GaloisGTM/<campaign>/gtm.xlsx`, and the human sends every message.
+> Install galois-gtm: run **`git clone --single-branch --depth 1 https://github.com/Galois-Labs/gtm.git ~/.claude/skills/galois-gtm && cd ~/.claude/skills/galois-gtm && ./setup`** then add a "galois-gtm" section to CLAUDE.md that says: prospecting, lead lists, and outreach route through the galois-gtm skills — /galois-setup (interview -> profile + workbook), /galois-targets (discover + tier), /galois-enrich (contacts + a keyless buying map + verified-email reveal), /galois-messages (draft + fact-check, caution dial 0-3), /galois-queue (build the DM queue), /galois-daily (morning digest) — each wave works one spreadsheet at `~/GaloisGTM/<campaign>/gtm.xlsx`, and the human sends every message.
 
 `./setup` auto-detects your hosts and wires each one with symlinks: Claude Code and Codex get the skills, Claude Desktop gets a ZIP of each skill to upload under Settings → Customize → Skills. No hosted service, no MCP server, no background process — just the skills and the workbook. Idempotent; `--host claude|codex|desktop` to target one. The only runtime dependency is `python3` + `openpyxl` for `.xlsx` waves (CSV mode needs nothing).
 
@@ -21,7 +21,7 @@ Each command is a wave. It reads the workbook, works, writes it back, and tells 
 ```
 /galois-setup      # the interview -> ~/GaloisGTM/<campaign>/gtm.xlsx + galois.profile.yaml beside it
 /galois-targets    # zero-key discovery from free public sources matched to your ICP -> Companies tab
-/galois-enrich     # contacts + verified-only email -> People tab
+/galois-enrich     # contacts + a keyless buying map + verified-only email -> People tab
 /galois-messages   # draft + fact-check (caution dial 0-3) -> Messages tab
 /galois-queue      # build today's DM-first queue -> Queue tab
 /galois-daily      # a 3-line morning digest, then the same waves
@@ -38,7 +38,7 @@ The workbook has six tabs, and their column headers are the contract:
 | Tab | What it holds |
 |---|---|
 | **Companies** | discovered targets, their signals/sources, and tier |
-| **People** | the LinkedIn-reachable contacts, and a verified email only when there is one |
+| **People** | the LinkedIn-reachable contacts, their buying-map role and approach order, and a verified email only when there is one |
 | **Messages** | drafts with a `claims` lane, fact-check `verdict`, and gate `STATUS` |
 | **Queue** | today's rendered DM-first slice — the `STATUS` marks are the ledger |
 | **Suppressed** | do-not-contact keys the agent checks before adding any row |
@@ -70,8 +70,9 @@ The list — and the LinkedIn route to every person on it — costs nothing beyo
 | What you get | Cost | How |
 |---|---|---|
 | Company lists from free public sources matched to your ICP — directories, "top N" lists, job boards, and registries (e.g. FDA 510(k) only if you sell to medtech), plus your CSVs | $0, no keys | Every discovery lane is keyless and `charges_when: never` |
-| People + LinkedIn URLs | $0 in API credits | Public LinkedIn search by your own agent (your existing Claude/Codex subscription does the work); registry filings, when your ICP uses them, include contact names; your Connections.csv ingests free |
-| Verified emails | ~1 Apollo credit or 1 Hunter search, **only on a hit** | Both paid connectors are `charges_when: on_verified_email` — a miss debits nothing, enforced in the budget ledger, not by policy |
+| People + LinkedIn URLs | $0 in API credits | Public LinkedIn search by your own agent (your existing Claude/Codex subscription does the work); no host search tool — a bare terminal or cron — falls back to a free `ddgs` lane, same trust rules, still $0; registry filings, when your ICP uses them, include contact names; your Connections.csv ingests free |
+| A buying map per company — who signs, who champions, who to approach first | $0, no keys | Built from keyless public sources (company team pages, the "reports to" line in job-post JSON, registry contact names, press quotes) — never a paid call, and an inferred reporting link only ever routes who you contact first, never a word of the message |
+| Verified emails | ~1 Apollo credit or 1 Hunter search, **only on a hit** | Both paid connectors are `charges_when: on_verified_email` — a miss debits nothing, enforced in the budget ledger, not by policy. The free lanes above always run to completion first: no paid call fires while any contact still has an unsearched public-search lane |
 | Phones | Not offered | Out of scope by design |
 | Anything to us | Never | Nothing hosted, nothing metered |
 
@@ -83,6 +84,10 @@ export HUNTER_API_KEY=<key>     # fallback finder; free tier ~25/mo — resolved
 ```
 
 No key ever produces a guessed email: the waterfall returns a verified address or nothing, and a no-hit routes DM-only. Before any paid call the skill reads your caps from the Budget tab, asks you first, and logs every credit there — a miss debits nothing. No key at all is the default motion: every contact routes DM-only, at $0.
+
+## Finding people, and who to approach first
+
+Contact discovery is the free lane, and it runs to completion before anything paid. Your agent's own search harvests LinkedIn-reachable buyers and champions by public search — it reads result link titles only and never loads a LinkedIn page (loading pages is what gets accounts banned). If a host has no search tool at all, a free `ddgs` fallback keeps that lane at $0. Then, still keyless, `/galois-enrich` builds a **buying map** for each company: who signs, who champions, and who to approach first — assembled from company team pages, the "reports to" sentence in public job-post JSON, registry contact names, and press quotes. Every reporting link is flagged `stated` (a public source says it) or `inferred` (deduced from titles); an inferred link only ever decides who you reach out to first, and the drafting step is barred from putting it in a message at any dial. Only then, on the head of the queue, does the optional verified-email reveal spend a credit.
 
 ## Evidence
 
