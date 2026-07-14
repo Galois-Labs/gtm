@@ -55,6 +55,8 @@ subdomains like `uk.` / `es.`, strip query strings, keep a trailing slash). Reco
   over-searching is what stalled prior batches. `NONE` is a valid, expected result.
 - Write `NONE` rather than fire a third search or invent a plausible-looking person.
 
+**No host WebSearch tool at all** (bare terminal, cron run)? Degrade to a ddgs one-shot: `pip install ddgs`, then `ddgs text -q 'site:linkedin.com <query>' -m 8` (power users with the optional CLI: `galois search "<query>" --site linkedin.com --max 8`). Same budgets, same trust rules — read the `title`/`href` fields ONLY, ignore the `body` snippets (same confabulation risk as SERP prose). ddgs missing = the lane is skipped, never guessed.
+
 ## Output shape (PersonSignal JSONL, one object per line)
 
 Emit rows the CLI ingests directly. No email at harvest time; email is a later reveal step.

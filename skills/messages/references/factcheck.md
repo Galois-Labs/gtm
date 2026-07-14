@@ -20,7 +20,9 @@ per the dial gate.
    registry entry is a source-of-record and needs no second source. Non-registry sources
    (blogs, directories, `sheet:notes`) earn CONFIRMED the ordinary way.
 3. Only a claim genuinely unsupported by the evidence block earns web time: **max 1 search per
-   claim, max 2 WebSearch total for your whole batch.** If one search does not settle it,
+   claim, max 2 WebSearch total for your whole batch** (no host WebSearch available? the main
+   session may run `ddgs text -q "<query>" -m 5` — pip install ddgs; or `galois search` with the
+   optional CLI — same caps, `title`/`href` only, ignore `body` snippets). If one search does not settle it,
    verdict UNVERIFIABLE and move on — never loop on a hard-to-verify claim.
 4. **Verify once per company, reuse across its contacts.** The same claim in three messages
    gets one verification and three verdict lines.

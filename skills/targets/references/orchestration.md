@@ -29,6 +29,12 @@ subagent that finds nothing within budget returns an empty list — never loops.
 Registry lanes do not fan out: they are `curl`/urllib recipes run in the main
 session per `registry_recipes.md`.
 
+**No host WebSearch tool** (bare terminal, cron): search-shaped lanes degrade to
+a ddgs one-shot — `pip install ddgs`, then `ddgs text -q "<query>" -m 8`
+(optional-CLI users: `galois search "<query>" --max 8`) — same per-lane budgets,
+`title`/`href` fields only, ignore `body` snippets. ddgs missing = the lane logs
+`skipped — no search backend` and the wave continues.
+
 ## 1. Assemble the residue (in memory — no file, no query)
 
 From the rows the main session already read for dedupe, keep those with a single
