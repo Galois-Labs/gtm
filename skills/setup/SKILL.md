@@ -66,8 +66,8 @@ path, tmp = os.path.join(folder, "gtm.xlsx"), os.path.join(folder, "gtm.tmp.xlsx
 os.makedirs(folder, exist_ok=True)
 
 TABS = {
-  "Companies":  ["name","domain","city","state","sources","signals","tier","TIER","rank","SELECT","notes"],
-  "People":     ["company","name","title","linkedin","email","email_source","status","SELECT","notes"],
+  "Companies":  ["name","domain","city","state","sources","signals","tier","TIER","rank","SELECT","notes","org_map"],
+  "People":     ["company","name","title","linkedin","email","email_source","status","SELECT","notes","org_role","seniority","function","reports_to","org_evidence","approach_order"],
   "Messages":   ["person","company","channel","subject","body","claims","verdict","dial","STATUS","notes"],
   "Queue":      ["date","person","company","channel","linkedin","subject","body","dial","STATUS","STATUS_NOTE"],
   "Suppressed": ["key","scope","reason","added","by"],

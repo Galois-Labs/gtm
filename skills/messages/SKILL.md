@@ -30,11 +30,12 @@ model: sonnet
 - Read `references/dial_fragments/<N>_msg.md` NOW — it is part of your drafting instructions. Keep `references/dial_fragments/<N>_check.md` aside for the fact-check wave. (The check fragments predate this flow: read their "KB facts table" as the Companies row's `signals`/`sources`/`notes`, and "export blocked at `queue build`" as the §7 dial gate you apply yourself.)
 - Build the work list, two parts:
   1. **New:** People rows with no Messages rows yet. Skip anyone matching the Suppressed tab (domain / person / email; a `domain`-scope key with no dot is a company name — match it against the normalized company name, since registry rows often have no domain yet), skip `SELECT=N`, skip contacts whose company's effective tier (`TIER` if non-blank else `tier`) is C. Order freshest signal first; tier A>B breaks ties only — a fresh-trigger B outranks a stale A; never stall on an empty A. Default scope ~30 contacts (about twice the daily queue) unless the user asks for more.
+     - **Within a company, order contacts by `approach_order` ascending (blank last)** — the org-map's routing, so the first-drafted contact is the first you'd approach. A contact whose `org_role` is `blocker` is **skipped unless `SELECT=Y`** (say so in the outro). These columns are read by header name: a workbook without them (or with them all blank) behaves exactly as today — no migration happens here, `/galois-enrich` §2b owns it.
   2. **Edited:** existing Messages rows where the `claims` cell no longer matches the `body` — the tell that a human rewrote the message. Handle per §8.
 
 ## 2. Dossier per contact — from the sheet's own columns
 
-- The dossier IS the sheet: the contact's People row (`title`, `notes`, `email`, `email_source`) plus their Companies row (`signals` with dates, `sources`, tier, `notes`). **This is your ONLY source of prospect facts.**
+- The dossier IS the sheet: the contact's People row (`title`, `notes`, `email`, `email_source`, plus the org-map cells `org_role` / `seniority` / `function` / `reports_to` / `org_evidence` / `approach_order`) plus their Companies row (`signals` with dates, `sources`, tier, `notes`). **This is your ONLY source of prospect facts.** `reports_to` marked `(inferred)` is ROUTING METADATA — it may shape who you write to and in what register, but it is **not a fact you may assert**.
 - Allowed extra: at most **1 web search per contact**, only to confirm the freshest signal is still current or to pin its date — never to discover new material.
 - Thin dossier (no dated signal, empty notes)? Do not draft inventively — park the contact and name them in the outro as "needs a research pass (`/galois-targets`)". A thin dossier is fixed by research, not an inventive draft.
 
@@ -49,6 +50,10 @@ Per contact, the two-message DM pack — **one Messages row per message**:
 - `email` — ONLY when the People row carries both `email` and `email_source`. No verified email → no email row, ever. Subject ≤9 words, body inside `voice.length_bands.email_words`, `constitution.opt_out_line` verbatim in the body when set.
 
 Every message genuinely different — no reused sentences, openers, or hook structures; two contacts at one company get different hooks and different pain narratives.
+
+**Register by `org_role`** (the org-map sets who you write to and how): **champion** → practitioner register, pain-level hook (the daily grind you'd ease); **economic_buyer** → outcome/risk register (what it de-risks or unlocks, not implementation detail); **influencer** → peer register; **unknown** → today's behavior. Register shapes tone and angle only — it never licenses a claim the dossier doesn't carry.
+
+**DIAL-GATE RULE (binding, every dial):** **A reporting edge may be referenced in copy ONLY when the People row's `reports_to` ends with `(stated)` AND `org_evidence` is a URL — and then softly (never "I know you report to X"). Any such reference MUST carry a claims line `verified | <the edge as asserted> | <org_evidence URL>`. An `(inferred)` edge NEVER appears in copy at any dial — no exception, no hedged phrasing; it only routes who gets drafted first.**
 
 `message_gen.md` governs voice, structure, and manifest discipline unchanged; its CLI-era plumbing maps to the workbook: a manifest entry → one line of the `claims` cell; `fact_id` → the claim line's source field; `drafts.jsonl` + `messages ingest` → you lint (§4) and write the rows yourself (§5); `person_key` → the People row's `name` + `company`; channels `linkedin_note`/`linkedin_dm` → `li_note`/`li_dm`.
 
@@ -68,6 +73,7 @@ Check every draft against the profile BEFORE it touches the workbook. Violations
 - Length bands per §3; note hard cap; email subject ≤9 words; opt-out line verbatim when set.
 - `voice.banned_words` / `voice.banned_styles`: word-boundary, case-insensitive; em/en dashes and exclamation marks out when banned; apply `voice.say_instead` substitutions.
 - Only claim classes the dial allows; every `verified` line carries a source; every prospect assertion in the body has a claims line, and every claims line appears in the body.
+- **Reporting-line gate.** Any body assertion about reporting lines / who-runs-what requires the verified claims line `verified | <edge> | <URL>` **AND** the row's `reports_to` flag = `(stated)`. If the flag is `(inferred)` or blank, or the source is not a URL, **fix the draft before writing** — a violating row is never written to the Messages tab.
 - Email rows only with a verified email (`email_source` ∈ `apollo_match` / `hunter≥80` / `user`). Never write a guessed email anywhere.
 
 ## 5. Write the Messages tab
@@ -78,7 +84,7 @@ Append one row per message: `person | company | channel | subject | body | claim
 
 ## 6. Fact-check wave
 
-Spawn fact-checker subagents (Sonnet-class). Each prompt carries: `references/factcheck.md`, `references/dial_fragments/<N>_check.md`, and its batch — per company an evidence block (the Companies row's `signals`, `sources`, `notes`, plus each claim's cited source), and per message `{row_ref, body, claims lines}` where `row_ref` = Messages sheet row number + person + channel.
+Spawn fact-checker subagents (Sonnet-class). Each prompt carries: `references/factcheck.md`, `references/dial_fragments/<N>_check.md`, and its batch — per company an evidence block (the Companies row's `signals`, `sources`, `notes`, plus each claim's cited source, plus each referenced contact's `reports_to` + `org_evidence` cells so the checker can verify an edge claim without a search), and per message `{row_ref, body, claims lines}` where `row_ref` = Messages sheet row number + person + channel.
 
 - Group by company — one checker owns ALL of a company's messages; verify once per company, reuse verdicts across its contacts.
 - Evidence-only batches: chunks of 40–50 messages. Claims needing web: chunks of 4–6 companies, ≤1 search per claim, ≤2 WebSearch per subagent; verdict UNVERIFIABLE rather than loop.
@@ -88,6 +94,8 @@ Spawn fact-checker subagents (Sonnet-class). Each prompt carries: `references/fa
 ## 7. The dial gate + repair
 
 **The dial gate is an instruction you obey, not code that saves you.** After verdicts land, set `STATUS` yourself, row by row. At dial 0–1: any Messages row whose `verdict` cell contains FALSE or UNVERIFIABLE gets `STATUS=blocked` and the reason in `notes` — a blocked row is never copied to Queue, and no wording talks past this. At dial 2–3: a row with UNVERIFIABLE claims goes `ready` with the flag visible in `verdict` (first line `caution: N unverified`); FALSE is still always corrected first — there is no dial where a false claim ships. Rows whose claims are all CONFIRMED (or softened per the dial fragment and re-checked clean) go `ready`. The human sends every message; nothing in this skill sends anything, ever.
+
+**The invariant carve-out (dial-independent, closes the dial-2/3 gap).** The dial-2/3 flag-not-block relaxation applies ONLY to ordinary unverified inferences. An UNVERIFIABLE verdict on one of the three invariant classes — a fabricated proper noun, an unconfirmed certification/compliance claim, or a **reporting-structure / who-runs-what claim** (anything sourced to `title-inference` or an `(inferred)` `reports_to`) — is corrected or cut at **every** dial exactly like FALSE, and its row is `blocked` until it is clean. It never ships flagged. This is the independent second gate behind §4's pre-write reporting-line lint: even if a drafter's self-lint misses an inferred edge that reached the body, the fact-check verdict lands here and this rule blocks it at dial 2–3, not just at 0–1. There is no dial at which an inferred reporting edge appears in sent copy.
 
 Repair before re-gating:
 

@@ -1,8 +1,9 @@
 # Dial 0 — Locked · drafting instruction
 
-**Two invariants at EVERY dial** (hard-coded in every fragment header AND enforced by the gate):
+**Three invariants at EVERY dial** (hard-coded in every fragment header AND enforced by the gate):
 1. Never fabricate proper nouns — products, programs, customers, certifications, quantities, quotes.
 2. Certification/compliance claims are verified-only, always — one wrong cert claim is instantly disqualifying with skeptical technical buyers.
+3. An INFERRED reporting edge is routing metadata and NEVER appears in message copy, at any dial; only a stated, URL-evidenced edge may be referenced, softly, with a verified claims line.
 
 Draft using ONLY facts marked verified in the dossier (registry/primary source or 2+ independent
 sources). NO inference of any kind — not "hiring implies", not "their category suggests", nothing.

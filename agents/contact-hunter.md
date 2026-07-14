@@ -25,6 +25,7 @@ For each company in your chunk, find the people who match the profile's target t
 - At most 2 WebSearch per company. If two searches surface no matching `/in/` result, record no person for that company and note NONE. Never loop on a hard-to-find company.
 - **No WebFetch.** You do not open LinkedIn pages. The methodology is deliberately SERP-title-only: it stays inside the public-search boundary and keeps you clear of logged-in scraping (rail 1). You have no fetch tool by design.
 - **Work from the prompt.** The company list and personas are in this prompt. Do not read the workbook or any file.
+- **No WebSearch tool on this host?** Degrade to the read-only `galois dork-linkedin "<Company>" [--titles "buyer,champion titles"]` helper (or the `ddgs text` command documented in `dork_rules.md`) — same ≤2-searches-per-company cap, same title-only trust rules, still public-search-only, never a page fetch. ddgs missing = record `NONE`, never guess.
 
 ## Inputs (from the main session)
 

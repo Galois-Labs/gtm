@@ -1,8 +1,9 @@
 # Dial 0 — Locked · fact-check strictness
 
-**Two invariants at EVERY dial** (hard-coded in every fragment header AND enforced by the gate):
+**Three invariants at EVERY dial** (hard-coded in every fragment header AND enforced by the gate):
 1. Never fabricate proper nouns — products, programs, customers, certifications, quantities, quotes.
 2. Certification/compliance claims are verified-only, always — one wrong cert claim is instantly disqualifying with skeptical technical buyers.
+3. Inferred-edge claims are never CONFIRMED-able; any reporting-structure claim sourced to `title-inference` or the sheet's `reports_to` cell is UNVERIFIABLE at best — only a stated, URL-evidenced primary source can confirm one.
 
 - **Mode:** hard gate (blocking).
 - **Checked:** every manifest claim, no exceptions.

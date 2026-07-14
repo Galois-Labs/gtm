@@ -91,6 +91,7 @@ Then write the self-contained HTML cockpit **directly from today's Queue rows** 
 - **Status radios per contact:** `( ) sent  ( ) accepted  ( ) replied  ( ) skip: reason ▾`, persisted to `localStorage`, each group carrying a stable `data-key="person|company|channel"`.
 - **Pacing rails are advisory UI** (the human is the enforcement): the weekly invite counter vs 80, a "done for today" banner at the daily cap, an acceptance meter that warns under 40% and suggests a pause under 25%.
 - **[Export status]** button: serialize the radios to a JSON blob — a list of `{key, status, note}` — for paste-back (step 5).
+- **[Copy row for Sheets]** per card + **[Copy all rows for Sheets]** at the bottom: build TSV lines matching the Queue tab headers exactly (`date | person | company | channel | linkedin | subject | body | dial | STATUS | STATUS_NOTE`), with `STATUS`/`STATUS_NOTE` read live from that card's radios/note field at click time; Excel-quote any field containing a tab, newline, or double quote (wrap in `"`, double inner quotes) so a paste lands one field per cell, multi-line bodies included.
 
 The beloved layout, for reference:
 
@@ -110,6 +111,7 @@ Give the user the cockpit's absolute path when it lands.
 The Queue tab's `STATUS` / `STATUS_NOTE` marks **are the ledger** (`STATUS` ∈ `sent` / `accepted` / `replied` / `skip` / `bounced`). Two equal paths write those same cells:
 
 - **Edit the tab.** The human types `sent` / `accepted` / `replied` / `skip` / `bounced` straight into the Queue tab's `STATUS` column (reason in `STATUS_NOTE`). Editing the sheet *is* the command — the next wave and `/galois-daily` read whatever is there.
+- **Paste TSV rows.** The cockpit's **[Copy row for Sheets]** buttons emit tab-separated lines with the live radio status already in the `STATUS`/`STATUS_NOTE` columns — paste them over the matching rows in the Queue tab in Excel/Sheets; same effect as typing the marks.
 - **Paste the blob.** The human clicks **[Export status]** in the cockpit and pastes the JSON here. Match each `{key: "person|company|channel", status, note}` to today's Queue row on `(date=today, person, company, channel)` and write `STATUS` / `STATUS_NOTE` for it — atomic tmp+replace, and **never overwrite a non-blank human mark with a blank**.
 
 Either path is what makes tomorrow's queue, the invite pacing, and the acceptance meter reflect what actually happened.

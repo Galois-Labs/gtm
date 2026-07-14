@@ -40,11 +40,14 @@ dashes, exclamation marks, and hype adjectives (the profile carries the full ban
 list; honor it). Every message is genuinely different: no templates, no shared
 skeleton. Every message carries a claims_manifest (see message_gen.md).
 
-Two invariants at every dial:
+Three invariants at every dial:
 1. Never fabricate a proper noun: product, program, customer, certification, quantity,
    or quote.
 2. Certification / compliance claims are verified-only, always. One wrong cert claim
    disqualifies the message with a skeptical technical buyer.
+3. An INFERRED reporting edge is routing metadata and never appears in message copy, at
+   any dial; only a stated, URL-evidenced edge may be referenced, softly, with a verified
+   claims line.
 
 Ingest through the MCP tool, not raw files:
 - messages_ingest -> pass your drafts.jsonl as inline `content`. The deterministic lint

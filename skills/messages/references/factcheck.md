@@ -1,7 +1,7 @@
 # Fact-check protocol (fact-checker subagents)
 
 You verify drafted messages against evidence. You are loaded with this file, the dial's check
-fragment (`dial_fragments/<N>_check.md` — its two invariants and strictness settings bind you),
+fragment (`dial_fragments/<N>_check.md` — its three invariants and strictness settings bind you),
 and your batch — all of it in your prompt: per company an evidence block (the workbook row's
 `signals`, `sources`, and `notes`, plus each claim's cited source), and per message
 `{row_ref, body, claims lines}`. **You never open, read, or write the workbook — subagents have
@@ -36,12 +36,17 @@ per the dial gate.
 |---|---|---|---|---|---|
 | 0 | Hard gate (blocking) | every claims line | rewrite/generalize, re-check | correct, re-check | `STATUS=blocked` until 100% CONFIRMED |
 | 1 | Hard gate (blocking) | every claim; whitelisted safe inferences auto-pass | soften | correct | `STATUS=blocked` until clean or softened |
-| 2 | Light pass (flag-not-block) | high-risk classes only: proper nouns, certs, standard→product mappings | flag `caution:unverified` | correct (FALSE is ALWAYS corrected, every dial) | `ready` with the flag visible in `verdict` |
-| 3 | Spot pass (flag-not-block) | fabrication classes only: proper nouns + numbers | per-row flag count | correct | `ready`; `verdict` first line "dial-3: N unverified inferences" |
+| 2 | Light pass (flag-not-block) | high-risk classes only: proper nouns, certs, standard→product mappings, reporting-structure claims | flag `caution:unverified` | correct (FALSE is ALWAYS corrected, every dial) | `ready` with the flag visible in `verdict` |
+| 3 | Spot pass (flag-not-block) | fabrication classes only: proper nouns + numbers + reporting-structure claims | per-row flag count | correct | `ready`; `verdict` first line "dial-3: N unverified inferences" |
 
 - At dial 1, claims of class `inferred_safe` auto-pass: do not spend searches on them; emit no
   verdict line (they are already whitelisted).
 - At dial 2–3, skip claims outside the checked classes entirely.
+- **The flag-not-block mode (dials 2–3) does NOT apply to the three invariant classes.** An
+  UNVERIFIABLE verdict on a fabricated proper noun, an unconfirmed cert/compliance claim, or a
+  reporting-structure / who-runs-what claim is an invariant violation: the main session corrects
+  or cuts it at **every** dial (like FALSE) and blocks the row until clean — it is never shipped
+  with a `caution:` flag. Flag-and-ship is only for ordinary, non-invariant unverified inferences.
 - The rewrite/soften/correct actions belong to the drafter in the main session; your job is the
   verdict and a note precise enough to act on.
 
@@ -79,6 +84,16 @@ wrong standard-to-product mapping.
 4. **Wrong standard-to-product mapping** — the standard/section must attach to the SPECIFIC
    product named. The Bay verify pass caught two products attached to one CFR section when only
    one belonged; the fix is generalizing to the part level, never asserting the wrong section.
+5. **Reporting-structure claims** — a claim about who reports to whom, or who runs a function, is
+   CONFIRMED only from a **primary NON-LinkedIn source**: the company's own team/leadership page,
+   an ATS posting's reports-to sentence, or a press quote attribution. The literal source strings
+   `title-inference` and `sheet:People!reports_to` are **NOT valid sources** — the sheet cell is
+   routing metadata, not evidence — so the verdict is UNVERIFIABLE. Because asserting an unproven
+   reporting relationship as fact is an **invariant-3 violation**, that UNVERIFIABLE is corrected
+   or cut at **every** dial (like FALSE, per the dial-table carve-out above and §7 of the skill),
+   never flagged-and-shipped — there is no dial at which an inferred edge reaches sent copy. A
+   claim that contradicts the stated evidence is FALSE. Stale press (>~18 months) supports at most
+   UNVERIFIABLE.
 
 Known failure modes worth extra suspicion (the only non-clean drafts in the Bay runs):
 quantitative-precision drift (counts, cadences, sizes stated more precisely than the evidence)

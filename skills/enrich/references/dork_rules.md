@@ -55,7 +55,51 @@ subdomains like `uk.` / `es.`, strip query strings, keep a trailing slash). Reco
   over-searching is what stalled prior batches. `NONE` is a valid, expected result.
 - Write `NONE` rather than fire a third search or invent a plausible-looking person.
 
-**No host WebSearch tool at all** (bare terminal, cron run)? Degrade to a ddgs one-shot: `pip install ddgs`, then `ddgs text -q 'site:linkedin.com <query>' -m 8` (power users with the optional CLI: `galois search "<query>" --site linkedin.com --max 8`). Same budgets, same trust rules — read the `title`/`href` fields ONLY, ignore the `body` snippets (same confabulation risk as SERP prose). ddgs missing = the lane is skipped, never guessed.
+## The ddgs fallback lane (no host WebSearch tool)
+
+Bare terminal or cron run with no host `WebSearch`? Degrade to `ddgs` — the free DuckDuckGo
+wrapper (`pip install ddgs`, or `pip install 'galois-gtm[search]'`). This is the **same
+public-search boundary**, just a different backend: link titles + hrefs off a SERP, never a
+logged-in fetch of a `linkedin.com` page. Same ≤2 searches per company, same `NONE`-not-loop,
+same trust rules.
+
+**Command shapes** — site-restricted to `linkedin.com/in` so the SERP returns profiles:
+
+```
+# 1) buyer/champion pass: OR the profile's target titles together
+ddgs text -q 'site:linkedin.com/in "Acme Surgical" ("Director of Quality" OR "VP Quality")' -m 8
+# 2) broader fallback, ONLY if (1) returns nothing usable: drop the title clause
+ddgs text -q 'site:linkedin.com/in "Acme Surgical"' -m 8
+```
+
+Power users with the optional CLI get those two queries, the ≤2-search cap, the slug
+normalization, and the title-parsing contract below all encoded in one read-only command:
+
+```
+galois dork-linkedin "Acme Surgical" --domain acme.com --titles "Director of Quality,VP Quality"
+```
+
+It prints PersonSignal JSONL — one `{company_name, full_name, title, linkedin_slug}` per line
+— ready to hand back exactly like a subagent's return.
+
+**Title-parsing contract (what you may read).** Read the `title` and `href` fields ONLY. A
+person is real only when `href` is an actual `linkedin.com/in/<slug>` URL; take the name and
+title from the `title` string (`"Name - Title at Company | LinkedIn"`), normalize the slug per
+*Slug normalization* above, and drop anything you cannot tie to an `/in/` href.
+
+**The `body` snippet is BANNED.** ddgs also returns a `body` field — the engine's prose
+summary. Never read it and never lift a name, title, or affiliation from it: it is the same
+confabulation class as the SERP prose the trust rules already forbid. `title` + `href` only.
+
+**The merged-titles quirk.** ddgs occasionally concatenates several result titles into ONE
+`title` line — e.g. `"Jane Doe - Eng at Acme | LinkedInJohn Smith - VP at Acme | LinkedIn"`,
+where the next name butts straight against the previous `| LinkedIn`. One result still carries
+exactly ONE `/in/` href, so it identifies exactly one person. Split the line on the
+`| LinkedIn` / `- LinkedIn` seam, keep only the entry whose name matches the slug, and drop the
+rest — they have no verified `/in/` URL of their own (`NONE`, never a guessed name↔slug
+pairing). `galois dork-linkedin` does exactly this in code.
+
+ddgs not installed = the fallback lane is logged as skipped and never guessed.
 
 ## Output shape (PersonSignal JSONL, one object per line)
 

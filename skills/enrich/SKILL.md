@@ -1,6 +1,6 @@
 ---
 name: enrich
-description: Harvest LinkedIn-reachable buyer and champion contacts for the head-of-queue companies in the workbook, then reveal verified emails ONLY for the head of queue via the Apollo to Hunter to None waterfall. Contact harvest runs through LinkedIn-dork subagents that trust link titles and ignore SERP prose and return rows as text; the main session writes the People tab. Reveal is budget-gated and ask-first, logs every credit to the Budget tab, and never guesses an email. Run after targets has populated and tiered Companies, once per daily slice, before drafting messages.
+description: Harvest LinkedIn-reachable buyer and champion contacts for the head-of-queue companies in the workbook, then build a $0 keyless per-company buying map (org roles, reporting edges, approach order) before any paid call, then reveal verified emails ONLY for the head of queue via the Apollo to Hunter to None waterfall. Contact harvest runs through LinkedIn-dork subagents that trust link titles and ignore SERP prose and return rows as text; the main session writes the People tab. Reveal is budget-gated and ask-first, logs every credit to the Budget tab, and never guesses an email. Run after targets has populated and tiered Companies, once per daily slice, before drafting messages.
 when_to_use: Companies is tiered and ranked (targets skill done) and you need contacts plus verified emails on the top companies before messages. Run per 10-20 company daily slice.
 argument-hint: "[max-credits]"
 allowed-tools: Bash, Agent, Read
@@ -40,6 +40,8 @@ Read the personas from the profile beside the workbook: `personas.buyer`, `perso
 
 Load `references/dork_rules.md` and follow it exactly — the stall-fixed harvest contract: **restrict WebSearch to `linkedin.com`; trust the result LINK TITLES only; IGNORE the SERP prose summary because it confabulates; record a contact only when its name and company are both visible in a real `/in/` URL and title; normalize slugs; ≤2 searches per company; write `NONE` rather than loop.**
 
+**Free LinkedIn lane first — the ordering is structural, not a preference.** Harvest is the free lane: host `WebSearch` dorks restricted to `linkedin.com`, or — where the host has no WebSearch tool — the ddgs fallback (the read-only `galois dork-linkedin` helper, or the raw `ddgs` command in `references/dork_rules.md`). This lane runs to completion for **every** head-of-queue company — a contact row or a logged `NONE` — before step 3 (reveal) opens. Nothing paid is touched while a free LinkedIn search is still owed.
+
 **Degradation (G7), verbatim:**
 
 > If your platform supports parallel subagents, fan out at 8–12 (Claude Code) or ≤6 (Codex), chunks of 4–6. If not, process the same chunks sequentially, checkpointing to the workbook after each chunk.
@@ -49,6 +51,7 @@ Chunk the worklist into groups of **4–6 companies** and spawn one dork worker 
 - **Claude Code:** spawn workers 8–12 concurrent. Paste into each worker prompt the **full body of `references/dork_rules.md`** plus the profile personas and each company's `name` + `domain`. The worker's only job is dork-and-return; it runs **no** state-writing command and never touches the workbook.
 - **Codex:** native subagent threads, ≤6, depth 1, sequential waves, same pasted prompt.
 - **Claude Desktop:** run the chunks serially yourself in-session.
+- **No host WebSearch tool at all** (bare terminal, cron): drop to the ddgs fallback per `references/dork_rules.md` — the power-user `galois dork-linkedin "<Company>" [--domain d] [--titles "t1,t2,…"]` helper (read-only, needs the `search` extra; it applies the same title-only trust rules and the ≤2-searches-per-company cap in code and emits PersonSignal JSONL), or the raw `ddgs text` command it documents. Same budgets, same trust rules; ddgs missing = the lane is skipped, never guessed.
 
 Every worker: 2–3 rows per company (one buyer + one or two champions), **≤2 WebSearch calls per company**, `NONE` rather than a third search or a guessed person. Workers **return PersonRows as text** — one JSON object per line: `{"company_name", "full_name", "title?", "linkedin_slug?"}`, no email.
 
@@ -82,7 +85,69 @@ EOF
 
 After the last chunk lands, append one **Budget** wave-log row for the harvest (`ts, stage=enrich-harvest, surface, rows_added, rows_changed=0, credits_spent=0, note`).
 
+## 2b. Org map — the Tier-0 buying map (keyless, $0)
+
+**Purpose.** Build a **buying map** — who signs, who champions, who to approach first — for every head-of-queue company. It is a decision aid, **never an HR chart**. Every reporting edge is flagged `stated` (a public source says it) or `inferred` (deduced from titles); an **inferred edge is routing metadata only** — it shapes who gets drafted first, and the messages skill enforces that it never appears in message copy. This lane is keyless and costs $0; it runs on top of the finished harvest and **before any paid reveal**.
+
+### Step 0 — idempotent column add (MAIN SESSION ONLY)
+
+Existing workbooks predate the org columns; new ones (scaffolded by `/galois-setup`) already have them. Migrate append-only, under the standard write discipline (`gtm.prev.xlsx` copy → `gtm.tmp.xlsx` → `os.replace`). Read header **row 1 by name**; for each missing header among People `[org_role, seniority, function, reports_to, org_evidence, approach_order]` and Companies `[org_map]`, append it at the **END** of row 1 (`ws.cell(row=1, column=ws.max_column+1)`). Never insert mid-row, never touch data rows — every read downstream is header-name-indexed, so a scaffolded and a migrated workbook end up byte-identical in layout. Re-running is a no-op (the presence check gates each append).
+
+```
+python3 - <<'EOF'
+import openpyxl, os, shutil
+wb_path = os.path.expanduser("~/GaloisGTM/<campaign>/gtm.xlsx")
+shutil.copyfile(wb_path, wb_path.replace("gtm.xlsx","gtm.prev.xlsx"))
+wb = openpyxl.load_workbook(wb_path)
+NEW = {"People":   ["org_role","seniority","function","reports_to","org_evidence","approach_order"],
+       "Companies":["org_map"]}
+for tab, cols in NEW.items():
+    ws = wb[tab]
+    have = {ws.cell(row=1, column=c).value for c in range(1, ws.max_column+1)}
+    for name in cols:
+        if name not in have:                       # append-only; re-run is a no-op
+            ws.cell(row=1, column=ws.max_column+1, value=name)
+tmp = wb_path.replace("gtm.xlsx","gtm.tmp.xlsx"); wb.save(tmp); os.replace(tmp, wb_path)
+EOF
+```
+
+### Fan-out (org-mapper subagents return text; you write)
+
+Chunk the **same** head-of-queue worklist from §1 into groups of **4-6 companies** and spawn one **org-mapper** worker per chunk.
+
+**Degradation (G7), verbatim:**
+
+> If your platform supports parallel subagents, fan out at 8–12 (Claude Code) or ≤6 (Codex), chunks of 4–6. If not, process the same chunks sequentially, checkpointing to the workbook after each chunk.
+
+Paste into each worker prompt the **full body of `references/org_mapping.md`** + the profile personas + per company: `name`, `domain`, **its harvested People rows** (from the §2 checkpoints you just wrote), and its Companies `signals`/`sources` lines. Budgets: **≤4 lookups per company, NONE-not-loop**; workers **RETURN OrgLines as text** and never open the workbook.
+
+- **Claude Code:** 8–12 concurrent org-mappers, chunks of 4–6.
+- **Codex:** native subagent threads, ≤6, sequential waves, same pasted prompt.
+- **Claude Desktop:** run the chunks **serially yourself in-session** with the chat's web-fetch — the org-mapper needs WebFetch for non-LinkedIn pages + the ATS JSON, and Desktop has it.
+- **No host WebSearch at all** (bare terminal, cron): drop to the read-only `galois org-map "<Company>" [--domain d] [--ats greenhouse:<slug>] [--people -]` helper (it enforces the ≤4-lookups cap and the no-LinkedIn-fetch rail in code and emits `org_person`/`org_summary` JSONL), or **skip the lane — never guess**.
+
+### Checkpoint after each chunk (single writer)
+
+After each chunk returns, you write — mirroring the §2 checkpoint:
+
+1. **Suppression check** first — skip returned rows whose company `domain` (scope `domain`) or person slug/name (scope `person`) is suppressed.
+2. **Match `org_person` lines to People rows** by linkedin slug, else by company + normalized name.
+3. **Fill the six `org_*` cells** — lowercase machine columns: fill blanks, and **refresh only when the new line carries a URL `evidence` and the old cell was `title-inference`**. Write the `reports_to` cell as `"<title-or-name> (stated)"` or `"<title-or-name> (inferred)"` from `reports_to_basis` — the parenthesized flag is load-bearing for the messages dial gate.
+4. **`new_person=true` rows** append as new People rows (`company`/`name`/`title` filled; `linkedin`/`email`/`email_source` blank; `status=harvested`; `org_*` filled) after dedupe on company + normalized name.
+5. **Write the `org_summary`** into the Companies row's `org_map` cell.
+6. **The atomic write is the checkpoint** (`gtm.prev.xlsx` copy → tmp → `os.replace`). A stall loses at most one chunk.
+
+After the last chunk, append one **Budget** wave-log row: `ts, stage=enrich-orgmap, surface, rows_added=<new people>, rows_changed=<rows org-filled>, credits_spent=0, note`.
+
+### OPTIONAL — Apollo roster lane (Tier-1)
+
+> **OPTIONAL — UNVERIFIED on our plan, off by default, ask first.**
+
+`references/org_mapping.md` §7 documents the `apollo_tier1` lane in full: `POST /api/v1/mixed_people/api_search` (a **roster**, not a reveal — master key required, **zero export credits**, titles/seniorities but **no emails**). It runs as a **main-session `curl`** (keys never reach a subagent), consumes zero reveal credits, and its rows enter the same fusion as any keyless source with `evidence=apollo_api_search` (inferred-grade for the copy gate). **Never call `/mixed_people/search`** — 403 on this plan. Ask before every wave it would run; on a 403 log one line and continue keyless.
+
 ## 3. Reveal — head of queue only, budget-gated, ask first
+
+**Harvest-before-reveal gate.** Do not begin reveal until the free lanes (step 2 harvest AND step 2b org map) have completed for every head-of-queue company — a contact row or a logged `NONE`, and a map or a logged `NONE`. **No paid call — Apollo or Hunter — fires while any head-of-queue company still has an unsearched free LinkedIn lane.** Reveal only ever runs on top of a finished harvest; the free lanes are exhausted first, always. **Reveal order within the head of queue follows `approach_order` (1 first) where present — spend the credit where the first send will happen.**
 
 Reveal is the throttle, not discovery: **verified-or-nothing**, only the head of queue, only rows with (full name OR linkedin) and no email yet, and only rows whose company is not `SELECT=N` and not suppressed. Pace 5–8 reveals/day — spend where the send happens.
 
@@ -115,7 +180,7 @@ When dorking is unavailable or low-yield, or the user has a LinkedIn export (off
 
 ## Wave outro (mandatory closing line)
 
-End with one line, e.g.: *"Wave done: +14 contacts harvested, 6 emails revealed (4 Apollo, 2 Hunter, 2 credits + a Hunter find logged to Budget), 8 route DM-only — edit anything in gtm.xlsx; the next wave reads whatever is there."*
+End with one line, e.g.: *"Wave done: +14 contacts harvested, +12 companies org-mapped, 6 emails revealed (4 Apollo, 2 Hunter, 2 credits + a Hunter find logged to Budget), 8 route DM-only — edit anything in gtm.xlsx; the next wave reads whatever is there."*
 
 ---
 
